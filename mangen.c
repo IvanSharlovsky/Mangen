@@ -1,5 +1,5 @@
 // mangen.c
-// Утилита генерации манифеста каталога
+// Утилита генерации манифеста каталога с контролем целостности
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,8 +17,9 @@
 const char *exclude_name = NULL; // Имя файла/каталога для исключения
 const char *exclude_pattern = NULL; // Шаблон для исключения
 
+uint32_t manifest_hash = 1; // Хэш для контроля целостности манифеста
+
 // Вычисляет простой хэш-функцию для содержимого файла
-// Используется упрощенный вариант алгоритма Adler-32
 uint32_t simple_hash(const char *filepath) {
     FILE *file = fopen(filepath, "rb");
     if (!file) {
@@ -36,9 +37,15 @@ uint32_t simple_hash(const char *filepath) {
     return hash;
 }
 
-// Сопоставление строки с шаблоном, где
-// * — любое количество символов
-// . — любой один символ
+// Обновляет хэш манифеста по строке
+void update_manifest_hash(const char *line) {
+    while (*line) {
+        manifest_hash = (manifest_hash + (uint8_t)(*line)) * 65521 % 0xFFFFFFFF;
+        line++;
+    }
+}
+
+// Сопоставление строки с шаблоном
 int match_pattern(const char *pattern, const char *str) {
     while (*pattern && *str) {
         if (*pattern == '*') {
@@ -63,7 +70,6 @@ int match_pattern(const char *pattern, const char *str) {
 // Рекурсивно обходит каталог и выводит пары <относительный путь> : <хэш>
 void process_directory(const char *base_path, const char *rel_path) {
     char path[4096];
-    // Формирование полного пути к текущему каталогу
     if (snprintf(path, sizeof(path), "%s/%s", base_path, rel_path) >= (int)sizeof(path)) {
         fprintf(stderr, "Path too long: %s/%s\n", base_path, rel_path);
         return;
@@ -77,20 +83,16 @@ void process_directory(const char *base_path, const char *rel_path) {
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
-        // Пропуск специальных директорий . и ..
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
             continue;
 
-        // Пропуск файлов/папок по имени исключения
         if (exclude_name && strcmp(entry->d_name, exclude_name) == 0)
             continue;
 
-        // Пропуск файлов/папок по паттерну исключения
         if (exclude_pattern && match_pattern(exclude_pattern, entry->d_name))
             continue;
 
         char new_rel_path[4096];
-        // Формирование нового относительного пути
         if (rel_path[0] != '\0') {
             if (snprintf(new_rel_path, sizeof(new_rel_path), "%s/%s", rel_path, entry->d_name) >= (int)sizeof(new_rel_path)) {
                 fprintf(stderr, "Relative path too long: %s/%s\n", rel_path, entry->d_name);
@@ -104,7 +106,6 @@ void process_directory(const char *base_path, const char *rel_path) {
         }
 
         char full_path[4096];
-        // Формирование полного пути к файлу или каталогу
         if (snprintf(full_path, sizeof(full_path), "%s/%s", base_path, new_rel_path) >= (int)sizeof(full_path)) {
             fprintf(stderr, "Full path too long: %s/%s\n", base_path, new_rel_path);
             continue;
@@ -116,14 +117,14 @@ void process_directory(const char *base_path, const char *rel_path) {
             continue;
         }
 
-        // Рекурсивный вызов для подкаталогов
         if (S_ISDIR(st.st_mode)) {
             process_directory(base_path, new_rel_path);
-        } 
-        // Вывод информации о файлах
-        else if (S_ISREG(st.st_mode)) {
+        } else if (S_ISREG(st.st_mode)) {
             uint32_t hash = simple_hash(full_path);
-            printf("%s : %08X\n", new_rel_path, hash);
+            char output_line[8192];
+            snprintf(output_line, sizeof(output_line), "%s : %08X\n", new_rel_path, hash);
+            printf("%s", output_line);
+            update_manifest_hash(output_line);
         }
     }
 
@@ -147,9 +148,8 @@ void print_version() {
 }
 
 int main(int argc, char *argv[]) {
-    const char *dir_path = "."; // По умолчанию текущий каталог
+    const char *dir_path = ".";
 
-    // Обработка аргументов командной строки
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0) {
             print_help();
@@ -179,9 +179,9 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Запуск обработки каталога
     process_directory(dir_path, "");
+
+    printf("Manifest checksum: %08X\n", manifest_hash);
 
     return 0;
 }
-
