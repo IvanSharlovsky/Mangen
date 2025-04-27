@@ -1,6 +1,5 @@
 // mangen.c
 // Утилита генерации манифеста каталога
-// Автор: Ivan Sharlovskii
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,9 +10,12 @@
 #include <errno.h>
 #include <stdint.h>
 
-#define VERSION "1.0" // Версия утилиты
+#ifndef GIT_COMMIT_HASH
+#define GIT_COMMIT_HASH "unknown"
+#endif
 
 const char *exclude_name = NULL; // Имя файла/каталога для исключения
+const char *exclude_pattern = NULL; // Шаблон для исключения
 
 // Вычисляет простой хэш-функцию для содержимого файла
 // Используется упрощенный вариант алгоритма Adler-32
@@ -32,6 +34,30 @@ uint32_t simple_hash(const char *filepath) {
 
     fclose(file);
     return hash;
+}
+
+// Сопоставление строки с шаблоном, где
+// * — любое количество символов
+// . — любой один символ
+int match_pattern(const char *pattern, const char *str) {
+    while (*pattern && *str) {
+        if (*pattern == '*') {
+            if (match_pattern(pattern + 1, str) || match_pattern(pattern, str + 1))
+                return 1;
+            else
+                return 0;
+        } else if (*pattern == '.' || *pattern == *str) {
+            pattern++;
+            str++;
+        } else {
+            return 0;
+        }
+    }
+
+    while (*pattern == '*')
+        pattern++;
+
+    return *pattern == '\0' && *str == '\0';
 }
 
 // Рекурсивно обходит каталог и выводит пары <относительный путь> : <хэш>
@@ -57,6 +83,10 @@ void process_directory(const char *base_path, const char *rel_path) {
 
         // Пропуск файлов/папок по имени исключения
         if (exclude_name && strcmp(entry->d_name, exclude_name) == 0)
+            continue;
+
+        // Пропуск файлов/папок по паттерну исключения
+        if (exclude_pattern && match_pattern(exclude_pattern, entry->d_name))
             continue;
 
         char new_rel_path[4096];
@@ -106,14 +136,14 @@ void print_help() {
     printf("Generate manifest of directory files with hashes.\n\n");
     printf("Options:\n");
     printf("  -h         Show help message and exit.\n");
-    printf("  -v         Show version information and exit.\n");
+    printf("  -v         Show git commit hash and exit.\n");
     printf("  -e NAME    Exclude files or directories with the specified NAME.\n");
+    printf("  -E PATTERN Exclude files or directories matching the PATTERN (supports '*' and '.').\n");
 }
 
 // Выводит информацию о версии утилиты
 void print_version() {
-    printf("mangen version %s\n", VERSION);
-    printf("Author: Ivan Sharlovskii\n");
+    printf("commit: %s\n", GIT_COMMIT_HASH);
 }
 
 int main(int argc, char *argv[]) {
@@ -134,6 +164,13 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "Option -e requires a file name argument\n");
                 return 1;
             }
+        } else if (strcmp(argv[i], "-E") == 0) {
+            if (i + 1 < argc) {
+                exclude_pattern = argv[++i];
+            } else {
+                fprintf(stderr, "Option -E requires a pattern argument\n");
+                return 1;
+            }
         } else if (argv[i][0] == '-') {
             fprintf(stderr, "Unknown option: %s\n", argv[i]);
             return 1;
@@ -147,3 +184,4 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
