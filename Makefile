@@ -10,6 +10,10 @@ all: $(TARGET)
 $(TARGET): mangen.c
 	$(CC) $(CFLAGS) -DGIT_COMMIT_HASH=\"$(GIT_HASH)\" -o $(TARGET) mangen.c
 
+test: all
+	chmod +x test.sh
+	./test.sh
+
 clean:
 	rm -f $(TARGET)
 
