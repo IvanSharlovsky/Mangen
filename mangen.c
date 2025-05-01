@@ -1,5 +1,6 @@
 // mangen.c
-// Утилита генерации манифеста каталога с контролем целостности
+// Directory manifest generator with integrity checking and verification
+// Author: Ivan Sharlovskii
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,12 +15,13 @@
 #define GIT_COMMIT_HASH "unknown"
 #endif
 
-const char *exclude_name = NULL; // Имя файла/каталога для исключения
-const char *exclude_pattern = NULL; // Шаблон для исключения
+const char *exclude_name = NULL;       // File or directory name to exclude by -e
+const char *exclude_pattern = NULL;    // Pattern to exclude by -E
 
-uint32_t manifest_hash = 1; // Хэш для контроля целостности манифеста
+uint32_t manifest_hash = 1;            // Global manifest checksum accumulator
 
-// Вычисляет простой хэш-функцию для содержимого файла
+// Computes a simple file hash by reading byte-by-byte and accumulating.
+// This uses a simplified Adler-32-like method.
 uint32_t simple_hash(const char *filepath) {
     FILE *file = fopen(filepath, "rb");
     if (!file) {
@@ -37,22 +39,20 @@ uint32_t simple_hash(const char *filepath) {
     return hash;
 }
 
-// Обновляет хэш манифеста по строке
+// Updates the global manifest_hash based on a full line of output text.
+// Called for every printed manifest line except checksum.
 void update_manifest_hash(const char *line) {
-    while (*line) {
+    for (; *line; ++line) {
         manifest_hash = (manifest_hash + (uint8_t)(*line)) * 65521 % 0xFFFFFFFF;
-        line++;
     }
 }
 
-// Сопоставление строки с шаблоном
+// Matches a filename against a pattern with '*' (wildcard) and '.' (any single character)
 int match_pattern(const char *pattern, const char *str) {
     while (*pattern && *str) {
         if (*pattern == '*') {
-            if (match_pattern(pattern + 1, str) || match_pattern(pattern, str + 1))
-                return 1;
-            else
-                return 0;
+            // '*' matches any number of characters, so we try both advancing pattern or str
+            return match_pattern(pattern + 1, str) || match_pattern(pattern, str + 1);
         } else if (*pattern == '.' || *pattern == *str) {
             pattern++;
             str++;
@@ -61,13 +61,12 @@ int match_pattern(const char *pattern, const char *str) {
         }
     }
 
-    while (*pattern == '*')
-        pattern++;
-
+    // Consume remaining '*' if any
+    while (*pattern == '*') pattern++;
     return *pattern == '\0' && *str == '\0';
 }
 
-// Рекурсивно обходит каталог и выводит пары <относительный путь> : <хэш>
+// Recursively walks through a directory and prints the manifest for each file
 void process_directory(const char *base_path, const char *rel_path) {
     char path[4096];
     if (snprintf(path, sizeof(path), "%s/%s", base_path, rel_path) >= (int)sizeof(path)) {
@@ -83,14 +82,14 @@ void process_directory(const char *base_path, const char *rel_path) {
 
     struct dirent *entry;
     while ((entry = readdir(dir)) != NULL) {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
-            continue;
+        // Skip "." and ".."
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
 
-        if (exclude_name && strcmp(entry->d_name, exclude_name) == 0)
-            continue;
+        // Check exclusion by name
+        if (exclude_name && strcmp(entry->d_name, exclude_name) == 0) continue;
 
-        if (exclude_pattern && match_pattern(exclude_pattern, entry->d_name))
-            continue;
+        // Check exclusion by pattern
+        if (exclude_pattern && match_pattern(exclude_pattern, entry->d_name)) continue;
 
         char new_rel_path[4096];
         if (rel_path[0] != '\0') {
@@ -117,9 +116,12 @@ void process_directory(const char *base_path, const char *rel_path) {
             continue;
         }
 
+        // If it's a directory — process recursively
         if (S_ISDIR(st.st_mode)) {
             process_directory(base_path, new_rel_path);
-        } else if (S_ISREG(st.st_mode)) {
+        }
+        // If it's a regular file — print hash line
+        else if (S_ISREG(st.st_mode)) {
             uint32_t hash = simple_hash(full_path);
             char output_line[8192];
             snprintf(output_line, sizeof(output_line), "%s : %08X\n", new_rel_path, hash);
@@ -131,25 +133,65 @@ void process_directory(const char *base_path, const char *rel_path) {
     closedir(dir);
 }
 
-// Выводит справку об использовании утилиты
+// Verifies that a manifest file ends with correct checksum
+int verify_manifest(const char *filename) {
+    FILE *file = fopen(filename, "r");
+    if (!file) {
+        perror(filename);
+        return 1;
+    }
+
+    char line[8192];
+    uint32_t parsed_hash = 0;
+    manifest_hash = 1;
+    int checksum_found = 0;
+
+    while (fgets(line, sizeof(line), file)) {
+        // If we detect checksum line, extract value and skip hashing
+        if (!checksum_found && sscanf(line, "Manifest checksum: %X", &parsed_hash) == 1) {
+            checksum_found = 1;
+            continue;
+        }
+        update_manifest_hash(line);
+    }
+
+    fclose(file);
+
+    if (!checksum_found) {
+        fprintf(stderr, "Invalid or missing checksum line\n");
+        return 1;
+    }
+
+    if (parsed_hash == manifest_hash) {
+        printf("Valid\n");
+        return 0;
+    } else {
+        printf("Corrupted\n");
+        return 1;
+    }
+}
+
+// Prints command-line usage help
 void print_help() {
     printf("Usage: ./mangen [DIR_PATH] [OPTIONS]\n");
     printf("Generate manifest of directory files with hashes.\n\n");
     printf("Options:\n");
-    printf("  -h         Show help message and exit.\n");
-    printf("  -v         Show git commit hash and exit.\n");
-    printf("  -e NAME    Exclude files or directories with the specified NAME.\n");
-    printf("  -E PATTERN Exclude files or directories matching the PATTERN (supports '*' and '.').\n");
+    printf("  -h           Show help message and exit.\n");
+    printf("  -v           Show git commit hash and exit.\n");
+    printf("  -e NAME      Exclude files or directories with the specified NAME.\n");
+    printf("  -E PATTERN   Exclude files or directories matching the PATTERN (supports '*' and '.').\n");
+    printf("  --verify F   Verify manifest file integrity.\n");
 }
 
-// Выводит информацию о версии утилиты
+// Prints version information
 void print_version() {
     printf("commit: %s\n", GIT_COMMIT_HASH);
 }
 
 int main(int argc, char *argv[]) {
-    const char *dir_path = ".";
+    const char *dir_path = ".";  // Default path is current directory
 
+    // Command-line argument parsing loop
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0) {
             print_help();
@@ -171,17 +213,26 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "Option -E requires a pattern argument\n");
                 return 1;
             }
+        } else if (strcmp(argv[i], "--verify") == 0) {
+            if (i + 1 < argc) {
+                return verify_manifest(argv[++i]);
+            } else {
+                fprintf(stderr, "--verify requires a file name\n");
+                return 1;
+            }
         } else if (argv[i][0] == '-') {
             fprintf(stderr, "Unknown option: %s\n", argv[i]);
             return 1;
         } else {
+            // If it's a path and not an option, treat as target directory
             dir_path = argv[i];
         }
     }
 
+    // Begin manifest generation
     process_directory(dir_path, "");
 
+    // Print final checksum line
     printf("Manifest checksum: %08X\n", manifest_hash);
-
     return 0;
 }
