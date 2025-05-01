@@ -180,7 +180,7 @@ void print_help() {
     printf("  -v           Show git commit hash and exit.\n");
     printf("  -e NAME      Exclude files or directories with the specified NAME.\n");
     printf("  -E PATTERN   Exclude files or directories matching the PATTERN (supports '*' and '.').\n");
-    printf("  --verify F   Verify manifest file integrity.\n");
+    printf("  --verify FILE   Verify manifest file integrity.\n");
 }
 
 // Prints version information
