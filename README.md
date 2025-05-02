@@ -14,7 +14,7 @@
 ## Usage
 
 ```bash
-./mangen [DIR_PATH] [OPTIONS]
+./bin/mangen [DIR_PATH] [OPTIONS]
 ```
 
 If `DIR_PATH` is omitted, the current directory is used.
@@ -44,7 +44,7 @@ Manifest checksum: <CHECKSUM>
 ## Example
 
 ```bash
-./mangen example_dir -e temp.log -E "*.sh" > manifest.txt
+./bin/mangen example_dir -e temp.log -E "*.sh" > manifest.txt
 cat manifest.txt
 ./mangen --verify manifest.txt
 ```
@@ -65,10 +65,10 @@ The utility is tested using `test.sh` via `make test`:
 Use `make` to build the utility:
 
 ```bash
-make        # Compile
-make clean  # Remove binary
-make version  # Show current Git commit hash
-make test   # Run test suite
+make           # Compile to ./bin/mangen
+make clean     # Remove build artifacts
+make version   # Show current Git commit hash
+make test      # Run test suite using ./bin/mangen
 ```
 
 ## Author
