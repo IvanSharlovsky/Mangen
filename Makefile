@@ -1,13 +1,3 @@
-# Makefile for building mangen from src/
-
-CC = gcc
-CFLAGS = -Wall -Wextra -Wpedantic -std=c11 -g
-SRCDIR = src
-OBJDIR = obj
-BINDIR = bin
-OBJS = $(OBJDIR)/main.o $(OBJDIR)/walker.o $(OBJDIR)/hash.o $(OBJDIR)/verify.o
-# Makefile for building mangen from src/
-
 CC = gcc
 CFLAGS = -Wall -Wextra -Wpedantic -std=c11 -g
 SRCDIR = src
@@ -21,7 +11,7 @@ all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	@mkdir -p $(BINDIR)
-	$(CC) $(CFLAGS) -DGIT_COMMIT_HASH=\"$(GIT_HASH)\" -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^
 
 $(OBJDIR)/main.o: $(SRCDIR)/main.c $(SRCDIR)/walker.h $(SRCDIR)/hash.h $(SRCDIR)/verify.h
 	@mkdir -p $(OBJDIR)
@@ -44,7 +34,7 @@ clean:
 
 test:
 	chmod +x test.sh
-	# Pass binary path to test script via BIN variable (default used in test.sh if unset)
+# Pass binary path to test script via BIN variable (default used in test.sh if unset)
 	BIN=$(TARGET) ./test.sh
 
 version:
