@@ -1,4 +1,4 @@
-// hash.c - Implements file and manifest hash functions
+// hash.c - Implements file and manifest hash functions with internal checksum tracking
 #include <stdio.h>
 #include <stdint.h>
 #include "hash.h"
@@ -8,15 +8,18 @@ static uint32_t manifest_hash = 1;
 
 // Computes a simple hash for a file by reading its contents byte-by-byte.
 // The algorithm is inspired by a simplified Adler-32 variant.
+// Returns 0 on failure, non-zero 32-bit hash otherwise.
 uint32_t simple_hash(const char *filepath) {
     FILE *file = fopen(filepath, "rb");
     if (!file) {
+        // Print error if file cannot be opened
         perror(filepath);
         return 0;
     }
 
     uint32_t hash = 1;
     int c;
+    // Read each byte of the file and update the hash
     while ((c = fgetc(file)) != EOF) {
         hash = (hash + (uint8_t)c) * 65521 % 0xFFFFFFFF;
     }
@@ -25,9 +28,8 @@ uint32_t simple_hash(const char *filepath) {
     return hash;
 }
 
-
-// Updates the global manifest_hash based on a full line of output text.
-// Called for every printed manifest line except checksum.
+// Updates the manifest hash by iterating through each character of a line.
+// Called for every line added to the manifest except the checksum line.
 void update_manifest_hash(const char *line) {
     for (; *line; ++line) {
         manifest_hash = (manifest_hash + (uint8_t)(*line)) * 65521 % 0xFFFFFFFF;

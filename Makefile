@@ -8,7 +8,7 @@ BINDIR  = bin
 OBJS    = $(OBJDIR)/main.o $(OBJDIR)/walker.o $(OBJDIR)/hash.o $(OBJDIR)/verify.o
 TARGET  = $(BINDIR)/mangen
 
-# вычисляем хеш сразу (:=) и передаём его как строку
+# вычисляем хеш сразу и передаём его как строку
 GIT_HASH := $(shell git rev-parse --short HEAD)
 DEFS     = -DGIT_COMMIT_HASH='"$(GIT_HASH)"'
 
@@ -37,7 +37,7 @@ $(OBJDIR)/verify.o: $(SRCDIR)/verify.c $(SRCDIR)/verify.h $(SRCDIR)/hash.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # -------- вспомогательные цели --------
-clean:
+clean
 	rm -rf $(OBJDIR) $(BINDIR)
 
 test: all        # пересобираем всегда, чтобы хеш был актуальным

@@ -1,4 +1,4 @@
-// hash.h
+// hash.h - Header for hash.c
 #ifndef HASH_H
 #define HASH_H
 
