@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "hash.h"
+#include "config.h"
 
 // Verifies that a manifest file ends with correct checksum
 int verify_manifest(const char *filename) {
@@ -12,12 +13,12 @@ int verify_manifest(const char *filename) {
         return 1;
     }
 
-    char line[8192];
+    char line[LINE_MAX_LEN];
     uint32_t parsed_hash = 0;
     reset_manifest_hash();
     int checksum_found = 0;
 
-    while (fgets(line, sizeof(line), file)) {
+    while (fgets(line, LINE_MAX_LEN, file)) {
         // If we detect checksum line, extract value and skip hashing
         if (!checksum_found && sscanf(line, "Manifest checksum: %X", &parsed_hash) == 1) {
             checksum_found = 1;

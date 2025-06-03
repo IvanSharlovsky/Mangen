@@ -37,7 +37,7 @@ $(OBJDIR)/verify.o: $(SRCDIR)/verify.c $(SRCDIR)/verify.h $(SRCDIR)/hash.h
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # -------- Auxiliary targets --------
-clean
+clean:
 	rm -rf $(OBJDIR) $(BINDIR)
 
 test: all        # Always rebuild to ensure the hash is up-to-date

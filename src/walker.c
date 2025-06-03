@@ -7,6 +7,7 @@
 #include <errno.h>
 #include "hash.h"
 #include "walker.h"
+#include "config.h"
 
 // Static variables to store exclusion filters
 static const char *exclude_name = NULL;
@@ -43,9 +44,9 @@ int match_pattern(const char *pattern, const char *str) {
 
 // Recursively processes a directory and computes hash lines
 void process_directory(const char *base_path, const char *rel_path) {
-    char path[4096];
+    char path[PATH_MAX_LEN];
     // Build full path from base and relative components
-    if (snprintf(path, sizeof(path), "%s/%s", base_path, rel_path) >= (int)sizeof(path)) {
+    if (snprintf(path, PATH_MAX_LEN, "%s/%s", base_path, rel_path) >= (int)PATH_MAX_LEN) {
         fprintf(stderr, "Path too long: %s/%s\n", base_path, rel_path);
         return;
     }
@@ -67,23 +68,23 @@ void process_directory(const char *base_path, const char *rel_path) {
         // Apply pattern filter
         if (exclude_pattern && match_pattern(exclude_pattern, entry->d_name)) continue;
 
-        char new_rel_path[4096];
+        char new_rel_path[PATH_MAX_LEN];
         // Build new relative path depending on whether we're at the root
         if (rel_path[0] != '\0') {
-            if (snprintf(new_rel_path, sizeof(new_rel_path), "%s/%s", rel_path, entry->d_name) >= (int)sizeof(new_rel_path)) {
+            if (snprintf(new_rel_path, PATH_MAX_LEN, "%s/%s", rel_path, entry->d_name) >= (int)PATH_MAX_LEN) {
                 fprintf(stderr, "Relative path too long: %s/%s\n", rel_path, entry->d_name);
                 continue;
             }
         } else {
-            if (snprintf(new_rel_path, sizeof(new_rel_path), "%s", entry->d_name) >= (int)sizeof(new_rel_path)) {
+            if (snprintf(new_rel_path, PATH_MAX_LEN, "%s", entry->d_name) >= (int)PATH_MAX_LEN) {
                 fprintf(stderr, "Relative path too long: %s\n", entry->d_name);
                 continue;
             }
         }
 
-        char full_path[4096];
+        char full_path[PATH_MAX_LEN];
         // Build full path to the file or directory
-        if (snprintf(full_path, sizeof(full_path), "%s/%s", base_path, new_rel_path) >= (int)sizeof(full_path)) {
+        if (snprintf(full_path, PATH_MAX_LEN, "%s/%s", base_path, new_rel_path) >= (int)PATH_MAX_LEN) {
             fprintf(stderr, "Full path too long: %s/%s\n", base_path, new_rel_path);
             continue;
         }
@@ -101,8 +102,8 @@ void process_directory(const char *base_path, const char *rel_path) {
         } else if (S_ISREG(st.st_mode)) {
             // Process regular file: compute hash and output line
             uint32_t hash = simple_hash(full_path);
-            char output_line[8192];
-            snprintf(output_line, sizeof(output_line), "%s : %08X\n", new_rel_path, hash);
+            char output_line[LINE_MAX_LEN];
+            snprintf(output_line, LINE_MAX_LEN, "%s : %08X\n", new_rel_path, hash);
             printf("%s", output_line);
             update_manifest_hash(output_line); // Include in manifest checksum
         }
